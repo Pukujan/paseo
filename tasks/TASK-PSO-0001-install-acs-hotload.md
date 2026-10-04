@@ -58,6 +58,29 @@ Starting revision, material inputs/configuration, runtime, exact command or prom
 
 No checkpoints yet.
 
+### 2026-10-04 17:36:28 UTC — executor-paseo
+
+<!-- continuity:checkpoint {"agent":"executor-paseo","blocked":["OIO files not installed (AGENTS.md symlink); needs Alex's call on a later issue."],"changed":[".content-system/, .continuity/, .coord/, .github/workflows/acs-gates.yml, HANDOFF.md, PROJECT.md, checkpoints/CURRENT.md, schemas/v1/, stack-manifest.json, tasks/"],"completed":["This fork had no checkpoint, no shared record of the decision-boss seat and no check for the agent stack, so the ACS multi-agent hot-loader 0.1.0 was installed: PCM files via continuity init (overlay, without README.md and AGENTS.md), a hand-written eight-module CGM adapter, .coord state, stack-manifest.json and an acs-gates workflow."],"decisions":["AGENTS.md is a symlink to upstream CLAUDE.md, so neither is edited; the stack notes live in HANDOFF.md. OIO is pinned in stack-manifest.json because the train requires it, but its installer refuses symlinked targets, so its files wait for Alex's decision."],"evidence":["All pinned validators passed on the box at 76d2e7c: release-train check_manifest OK (4 components), continuity validate VALID (one warning: AGENTS.md links to upstream CLAUDE.md and has no PCM issue-log marker), CGM validate_content_system VALID, hotload_check OK. Paseo's oxfmt 0.46.0 --check and oxlint 1.61.0 were clean and scripts/ci-workflow.test.mjs passed 9 of 9."],"next_action":"Open the pull request linked to issue #1 and let auto-merge land it once the checks are green.","protocol_version":"0.1.0-draft","schema":"project-continuity.checkpoint.v1","task_id":"PSO-0001","timestamp":"2026-10-04T17:36:28Z"} -->
+<!-- continuity:checkpoint-operation {"payload_sha256":"5da6193d1295e6879b8086fe2f5cf45dcfd2ba407c4aa9796b25cf57cc212232","request_id":"16ff43eae3c04d4d96b9f81b7e1a666b","schema":"project-continuity.checkpoint-operation.v1","task_id":"PSO-0001"} -->
+
+Completed:
+- This fork had no checkpoint, no shared record of the decision-boss seat and no check for the agent stack, so the ACS multi-agent hot-loader 0.1.0 was installed: PCM files via continuity init (overlay, without README.md and AGENTS.md), a hand-written eight-module CGM adapter, .coord state, stack-manifest.json and an acs-gates workflow.
+
+Evidence:
+- All pinned validators passed on the box at 76d2e7c: release-train check_manifest OK (4 components), continuity validate VALID (one warning: AGENTS.md links to upstream CLAUDE.md and has no PCM issue-log marker), CGM validate_content_system VALID, hotload_check OK. Paseo's oxfmt 0.46.0 --check and oxlint 1.61.0 were clean and scripts/ci-workflow.test.mjs passed 9 of 9.
+
+Decisions:
+- AGENTS.md is a symlink to upstream CLAUDE.md, so neither is edited; the stack notes live in HANDOFF.md. OIO is pinned in stack-manifest.json because the train requires it, but its installer refuses symlinked targets, so its files wait for Alex's decision.
+
+Changed:
+- .content-system/, .continuity/, .coord/, .github/workflows/acs-gates.yml, HANDOFF.md, PROJECT.md, checkpoints/CURRENT.md, schemas/v1/, stack-manifest.json, tasks/
+
+Blocked/uncertain:
+- OIO files not installed (AGENTS.md symlink); needs Alex's call on a later issue.
+
+Next:
+- Open the pull request linked to issue #1 and let auto-merge land it once the checks are green.
+
 ## Handoff
 
 Read PROJECT → CURRENT → this task → minimum relevant spec. Checkpoint before stopping.
