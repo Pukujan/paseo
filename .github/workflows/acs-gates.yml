@@ -1,0 +1,85 @@
+name: acs-gates
+
+# Fork-only check for the agent stack (ACS multi-agent hot-loader 0.1.0 with
+# full PCM and full CGM), pinned to release train 2026-10-01. Fail closed: any
+# failed or skipped step fails the `gates` job. Paseo's own CI stays in ci.yml.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acs-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates
+    runs-on: ubuntu-latest
+    env:
+      PCM_COMMIT: 4e2385474b4af9249ca009cbdcb38c4498932475
+      CGM_COMMIT: 6831f91e165b62d719c05eb492f7375fa932b560
+      ACS_COMMIT: 3a381eba11c6262c702f5d696878c371342e859a
+      ACS_MODULE: modules/coordination/multi-agent-hotload/v0.1.0
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Prepare validation tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          validation_root=$(mktemp -d "$RUNNER_TEMP/acs-validation.XXXXXX")
+          echo "VALIDATION_ROOT=$validation_root" >> "$GITHUB_ENV"
+          uv venv --quiet --python 3.11 "$validation_root/venv"
+          uv pip install --quiet --python "$validation_root/venv/bin/python" jsonschema
+          echo "PY=$validation_root/venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Validate stack-manifest against the release train
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 https://github.com/Pukujan/agent-stack-train.git "$VALIDATION_ROOT/train"
+          "$PY" "$VALIDATION_ROOT/train/scripts/check_manifest.py" \
+            --manifest stack-manifest.json \
+            --train "$VALIDATION_ROOT/train/stack-releases.json"
+
+      - name: Validate pinned PCM continuity state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/Pukujan/project-continuity-modules.git "$VALIDATION_ROOT/pcm"
+          git -C "$VALIDATION_ROOT/pcm" checkout --quiet "$PCM_COMMIT"
+          PYTHONPATH="$VALIDATION_ROOT/pcm/src" "$PY" -m continuity validate --root .
+
+      - name: Validate full CGM adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/Pukujan/content-generation-modules.git "$VALIDATION_ROOT/cgm"
+          git -C "$VALIDATION_ROOT/cgm" checkout --quiet "$CGM_COMMIT"
+          "$PY" "$VALIDATION_ROOT/cgm/scripts/validate_content_system.py" \
+            --root "$VALIDATION_ROOT/cgm" \
+            --adapter .content-system \
+            --project-root .
+
+      - name: Validate pinned ACS hot-loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/Pukujan/agent-custom-setup.git "$VALIDATION_ROOT/acs"
+          git -C "$VALIDATION_ROOT/acs" checkout --quiet "$ACS_COMMIT"
+          "$PY" "$VALIDATION_ROOT/acs/$ACS_MODULE/scripts/hotload_check.py" \
+            --root "$VALIDATION_ROOT/acs/$ACS_MODULE" \
+            --assignment "$GITHUB_WORKSPACE/.coord/assignment.json" \
+            --cgm-root "$VALIDATION_ROOT/cgm" \
+            --adopter-root "$GITHUB_WORKSPACE"

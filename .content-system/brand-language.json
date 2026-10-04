@@ -1,0 +1,13 @@
+{
+  "schema_version": "content-generation.brand-language.v1",
+  "name": "Paseo (Pukujan fork)",
+  "personality": ["plain", "calm", "practical"],
+  "promise": "A copy of Paseo that stays close to upstream, where agents can prepare small fixes for Alex's setup and send them upstream first.",
+  "avoid": [
+    "fake metrics",
+    "claiming features that have not shipped",
+    "speaking for the upstream Paseo project",
+    "unexplained acronyms",
+    "showing keys, tokens, host passwords or private file paths"
+  ]
+}

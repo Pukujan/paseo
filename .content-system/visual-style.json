@@ -1,0 +1,25 @@
+{
+  "schema_version": "content-generation.visual-style.v1",
+  "reference_asset": "packages/website/public/logo.svg",
+  "generation_workflow": "built-in image_gen",
+  "narrative_roles": ["hero", "problem", "supporting"],
+  "palette": {
+    "background": "#ffffff",
+    "surface": "#f5f5f5",
+    "accent": "#4338ca"
+  },
+  "roles": {
+    "supporting": {
+      "purpose": "diagrams in fork issues or pull requests that explain a change; not product marketing"
+    },
+    "brand-reference": {
+      "purpose": "upstream Paseo logo, reused unchanged; the fork adds no brand art of its own"
+    }
+  },
+  "reject_when": [
+    "fake metrics or invented stats",
+    "decorative complexity without meaning",
+    "tiny unreadable labels on a phone screen",
+    "screenshots that show keys, tokens, host passwords or private file paths"
+  ]
+}
