@@ -1,0 +1,22 @@
+{
+  "schema_version": "content-generation.review-rubric.v1",
+  "dimensions": [
+    {
+      "id": "clarity",
+      "question": "Can a newcomer tell what a change does to Paseo and why the fork needed it?"
+    },
+    {
+      "id": "honesty",
+      "question": "Do issues and pull requests say plainly what was tested, what was skipped and what still depends on upstream?"
+    },
+    {
+      "id": "upstream-fit",
+      "question": "Does the change stay small enough to sync with upstream or to send upstream as its own pull request?"
+    },
+    {
+      "id": "safety",
+      "question": "Are keys, host passwords and private paths kept out of the repository and out of issue text?"
+    }
+  ],
+  "decision_rule": "human review plus deterministic repository gates"
+}

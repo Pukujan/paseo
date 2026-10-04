@@ -1,0 +1,15 @@
+{
+  "schema_version": "content-generation.asset-manifest.v1",
+  "system_version": "0.5.12",
+  "assets": [
+    {
+      "path": "packages/website/public/logo.svg",
+      "role": "brand-reference",
+      "orientation": "svg",
+      "dimensions": "square",
+      "text_policy": "Upstream Paseo logo, used unchanged; no fork claims or metrics.",
+      "review": "upstream",
+      "source": "Upstream getpaseo/paseo artwork already in the repository; listed so fork documents reuse it instead of making new brand images. Not a generated narrative asset."
+    }
+  ]
+}
