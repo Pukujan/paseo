@@ -507,7 +507,7 @@ function Invoke-FriendInstall {
 
     $ourTaskRunning = $existing -and $existing.State -eq 'Running'
     if (-not $ourTaskRunning -and (Test-PortListening $Port)) {
-        Write-Friend "Something else is already listening on port $Port (maybe Paseo Desktop or another daemon). Not starting a second daemon; the task will start it at the next sign-in once that's gone." 'warn'
+        Write-Friend "Something else is already listening on port $Port (maybe Paseo Desktop or another daemon). Not starting a second daemon. If you already run Paseo another way, keep only one of them: turn the other off, or remove this task with -Uninstall." 'warn'
     } else {
         $what = if ($ourTaskRunning) { 'restart the Paseo daemon so it picks up the new settings' } else { 'start the Paseo daemon now (hidden)' }
         Invoke-Change $what {

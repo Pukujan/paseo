@@ -152,7 +152,9 @@ function writeJsonAtomic(file, value) {
 
 function backup(file) {
   if (!existsSync(file)) return null;
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
   let dest = `${file}.bak-${stamp}`;
   for (let i = 1; existsSync(dest); i++) dest = `${file}.bak-${stamp}-${i}`;
   copyFileSync(file, dest);
