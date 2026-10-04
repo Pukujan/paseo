@@ -8,6 +8,7 @@ It's one command. You can run it again whenever you like, and you can take it al
 
 - Windows 10 or 11, signed in as yourself (no admin needed).
 - Your InferHub API key. The installer asks for it and hides what you type.
+- A TinyFish key, if you want good web search in Claude. It's free: sign up at <https://agent.tinyfish.ai/sign-up>, then make a key at <https://agent.tinyfish.ai/api-keys>. You can skip it (press Enter at the prompt) and add it later with `claude-inferhub --set-tinyfish-key`.
 - The Paseo app on your phone, if you want to use it from your phone.
 - Optional: [Tailscale](https://tailscale.com/download) on the PC and the phone, if you want a direct connection instead of the Paseo relay.
 
@@ -31,12 +32,19 @@ The options you might care about:
 
 | Option | What it does |
 |---|---|
-| `-InferHubKey <key>` | Give the key up front instead of being asked. |
+| `-InferHubKey <key>` | Give the InferHub key up front instead of being asked. |
+| `-TinyFishKey <key>` | Give the TinyFish key up front instead of being asked. |
+| `-SkipTinyFish` | Don't ask for a TinyFish key at all. |
+| `-NonInteractive` | Never ask anything. The InferHub key then has to come from `-InferHubKey` or the environment; a missing TinyFish key just gets a warning. |
 | `-WithAgy` | Also set up Google Antigravity (see below). |
 | `-Tailscale` | Let Paseo listen on your Tailscale address, so your phone can connect directly. Without it, Paseo only listens on this PC. |
 | `-DryRun` | Show what it would do and change nothing. |
 | `-Uninstall` | Take it all back out. |
 | `-SkipLauncher` | Don't touch the Claude launcher (it's already set up). |
+
+The safest way to give your keys is to let the installer ask. What you type at its prompt is hidden and isn't saved in your PowerShell history (a key typed as `-InferHubKey ...` is). The installer also reads `INFERHUB_API_KEY` and `TINYFISH_API_KEY` (or `CCL_INFERHUB_KEY` and `CCL_TINYFISH_KEY`) if they're already set, which is handy for scripted setups.
+
+However you give them, the installer hands the keys to the launcher through the environment only. They never show up on a command line, in the output, or in a log.
 
 ## What it installs
 
@@ -44,6 +52,8 @@ The options you might care about:
 2. **Paseo 0.10.3**, installed with pnpm. It's pinned on purpose, so an update can't surprise you.
 3. **A hidden logon task** called `Paseo Daemon`. It starts Paseo in the background each time you sign in to Windows. No window ever pops up. The script it runs and its logs are in `%USERPROFILE%\.paseo\friend`.
 4. **One setting in Paseo**: the Claude agent in Paseo goes through the launcher, so it uses your InferHub key and the same models as `claude-inferhub`. Your existing `%USERPROFILE%\.paseo\config.json` is copied to `config.json.bak-<date>` first, and nothing else in it is changed.
+
+**Already running Paseo?** If another scheduled task already starts Paseo, or something (say Paseo Desktop) is already using port 6767, the installer doesn't start a second one. It adds `Paseo Daemon` switched off and tells you so. Turn the other one off and run the installer again if you want this one instead.
 
 ## Connecting from your phone
 
@@ -92,7 +102,7 @@ It leaves alone: Node, pnpm, uv, git, Claude Code, the `agy` tool and its sign-i
 
 ## If something goes wrong
 
-- **Paseo doesn't show up on the phone.** Check the logs in `%USERPROFILE%\.paseo\friend\logs`. Make sure nothing else is already running Paseo (for example Paseo Desktop); only one daemon can use port 6767.
+- **Paseo doesn't show up on the phone.** Check the logs in `%USERPROFILE%\.paseo\friend\logs`. If the installer said it set up `Paseo Daemon` switched off, something else is already running Paseo; only one daemon can use port 6767.
 - **Claude in Paseo fails to start.** Run `claude-inferhub` in a terminal first. If that works, Paseo will too.
 - **Antigravity says it isn't signed in.** Run `agy` once more and sign in.
 - **Want to see what would happen first?** Add `-DryRun`.

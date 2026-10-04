@@ -178,6 +178,19 @@ function Write-FriendState {
     Write-Utf8NoBom -Path $Paths.State -Text (ConvertTo-Json -InputObject $State -Depth 5)
 }
 
+# Says where the launcher will get its keys from, without ever showing a key.
+function Get-KeySourceNote {
+    $ih = if ($InferHubKey) { 'the InferHub key you gave' }
+          elseif ($env:CCL_INFERHUB_KEY -or $env:INFERHUB_API_KEY) { 'the InferHub key from the environment' }
+          else { 'a stored InferHub key or its own (hidden) prompt' }
+    $tf = if ($SkipTinyFish) { 'no TinyFish key (-SkipTinyFish)' }
+          elseif ($TinyFishKey) { 'the TinyFish key you gave' }
+          elseif ($env:CCL_TINYFISH_KEY -or $env:TINYFISH_API_KEY) { 'the TinyFish key from the environment' }
+          elseif ($NonInteractive) { 'a stored TinyFish key, or none (it warns and goes on)' }
+          else { 'a stored TinyFish key or its own (hidden) prompt' }
+    return ($ih + ' and ' + $tf)
+}
+
 function Get-LauncherInstallerUrl {
     if ($LauncherInstallerUrl) { return $LauncherInstallerUrl }
     if ($LauncherRef -match '^v\d') {
@@ -265,6 +278,21 @@ function Get-PaseoGlobalVersion {
 function Test-PortListening {
     param([int]$LocalPort)
     try { return [bool](Get-NetTCPConnection -LocalPort $LocalPort -State Listen -ErrorAction SilentlyContinue) } catch { return $false }
+}
+
+# Names of other scheduled tasks whose action starts Paseo (a start-paseo script,
+# `paseo daemon`, or anything under a .paseo folder). Windows' own tasks are skipped.
+function Get-OtherPaseoTask {
+    param([string]$Exclude)
+    $found = @()
+    foreach ($t in @(Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+        if ($t.TaskName -eq $Exclude -or $t.TaskPath -like '\Microsoft\*') { continue }
+        foreach ($a in @($t.Actions)) {
+            $text = ([string]$a.Execute) + ' ' + ([string]$a.Arguments)
+            if ($text -match '(?i)start-paseo|paseo(\.cmd|\.ps1)?["'']?\s+daemon|\\\.paseo\\') { $found += $t.TaskName; break }
+        }
+    }
+    return $found
 }
 
 function Get-ClaudeProviderSpec {
@@ -356,13 +384,14 @@ function Invoke-FriendInstall {
         $launcherArgs = @('-Ref', $LauncherRef, '-InstallDir', $paths.Launcher)
         if ($SkipTinyFish) { $launcherArgs += '-SkipTinyFish' }
         if ($NonInteractive) { $launcherArgs += '-NonInteractive' }
-        $keyNote = if ($InferHubKey) { 'the InferHub key you gave' } else { 'its own key prompt' }
+        $keyNote = Get-KeySourceNote
         if ($script:DryRunMode) {
             $ok = Test-UrlReachable $url
             Write-Friend ("download $url (reachable: $ok) and run it with " + ($launcherArgs -join ' ') + " and $keyNote") 'plan'
         } else {
             $tmp = Join-Path ([IO.Path]::GetTempPath()) ('ccl-install-' + [guid]::NewGuid().ToString('n') + '.ps1')
             Write-Friend "Downloading $url"
+            Write-Friend "The launcher will use $keyNote."
             Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
             $saved = @{ CCL_INFERHUB_KEY = $env:CCL_INFERHUB_KEY; CCL_TINYFISH_KEY = $env:CCL_TINYFISH_KEY }
             try {
@@ -494,21 +523,34 @@ function Invoke-FriendInstall {
     $parts = Get-DaemonTaskParts $paths
     $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Invoke-Change ("install the start script at $($paths.StartScript)") { Get-HelperFile -Name 'start-paseo.ps1' -Destination $paths.StartScript } | Out-Null
+    # Never set up a second daemon that would fight an existing one for the port.
+    $ourTaskRunning = [bool]($existing -and $existing.State -eq 'Running')
+    $others = @(Get-OtherPaseoTask -Exclude $TaskName)
+    $portHeld = (-not $ourTaskRunning) -and (Test-PortListening $Port)
+    $conflict = ($others.Count -gt 0) -or $portHeld
+    if ($conflict) {
+        if ($others.Count -gt 0) {
+            Write-Friend ("Another scheduled task already starts Paseo: " + (($others | ForEach-Object { "'" + $_ + "'" }) -join ', ') + '.') 'warn'
+        }
+        if ($portHeld) {
+            Write-Friend "Something else is already listening on port $Port (maybe Paseo Desktop or another Paseo daemon)." 'warn'
+        }
+        Write-Friend "So '$TaskName' is registered DISABLED and nothing is started. To use it instead: turn the other one off (for a task: Disable-ScheduledTask -TaskName '<name>'; for Paseo Desktop: quit it), then run this installer again." 'warn'
+    }
     $verb = if ($existing) { 'update' } else { 'register' }
-    Invoke-Change ("$verb the logon task '$TaskName': " + $parts.Execute + ' ' + $parts.Arguments) {
+    $how = if ($conflict) { ' (disabled, see the warning above)' } else { '' }
+    Invoke-Change ("$verb the logon task '$TaskName'$how" + ': ' + $parts.Execute + ' ' + $parts.Arguments) {
         $action = New-ScheduledTaskAction -Execute $parts.Execute -Argument $parts.Arguments
         $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
         $trigger.Delay = 'PT20S'
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        if ($conflict) { $settings.Enabled = $false }
         $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
         $null = Register-ScheduledTask -TaskName $TaskName -Description 'Starts the Paseo daemon hidden at logon (installed by install-friend.ps1)' -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
     } | Out-Null
 
-    $ourTaskRunning = $existing -and $existing.State -eq 'Running'
-    if (-not $ourTaskRunning -and (Test-PortListening $Port)) {
-        Write-Friend "Something else is already listening on port $Port (maybe Paseo Desktop or another daemon). Not starting a second daemon. If you already run Paseo another way, keep only one of them: turn the other off, or remove this task with -Uninstall." 'warn'
-    } else {
+    if (-not $conflict) {
         $what = if ($ourTaskRunning) { 'restart the Paseo daemon so it picks up the new settings' } else { 'start the Paseo daemon now (hidden)' }
         Invoke-Change $what {
             Stop-FriendDaemon $paths $TaskName
