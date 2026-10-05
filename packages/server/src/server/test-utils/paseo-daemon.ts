@@ -16,6 +16,8 @@ import type { PushNotificationSender } from "../push/index.js";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 
 interface TestPaseoDaemonOptions {
+  directorySearchExtraRoots?: string[];
+  directorySearchRoots?: string[];
   daemonVersion?: string;
   desktopManaged?: boolean;
   downloadTokenTtlMs?: number;
@@ -188,6 +190,8 @@ async function prepareTestDaemonConfig(
     daemonVersion: options.daemonVersion,
     desktopManaged: options.desktopManaged,
     corsAllowedOrigins: options.corsAllowedOrigins ?? [],
+    directorySearchExtraRoots: options.directorySearchExtraRoots,
+    directorySearchRoots: options.directorySearchRoots,
     hostnames: true,
     mcpEnabled: options.mcpEnabled ?? true,
     staticDir,

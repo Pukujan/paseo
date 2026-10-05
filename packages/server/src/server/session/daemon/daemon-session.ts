@@ -16,6 +16,8 @@ import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
 export interface DaemonRuntimeConfig {
   listen: string | null;
   worktreesRoot?: string;
+  directorySearchExtraRoots?: string[];
+  directorySearchRoots?: string[];
   appBaseUrl?: string;
   desktopManaged?: boolean;
   getRelayConfig(): {
