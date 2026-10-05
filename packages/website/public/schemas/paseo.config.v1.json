@@ -107,6 +107,18 @@
               },
               "additionalProperties": false
             },
+            "directorySearch": {
+              "type": "object",
+              "properties": {
+                "extraRoots": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
             "relay": {
               "type": "object",
               "properties": {

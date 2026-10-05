@@ -432,6 +432,27 @@ function resolveCorsAllowedOrigins(
   );
 }
 
+export function resolveDirectorySearchExtraRoots(
+  env: NodeJS.ProcessEnv,
+  persisted: Pick<PersistedConfig, "daemon">,
+): string[] {
+  const envRoots = env.PASEO_DIRECTORY_SEARCH_EXTRA_ROOTS
+    ? env.PASEO_DIRECTORY_SEARCH_EXTRA_ROOTS.split(path.delimiter)
+    : [];
+  const persistedRoots = persisted.daemon?.directorySearch?.extraRoots ?? [];
+  const roots: string[] = [];
+  for (const raw of [...persistedRoots, ...envRoots]) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const expanded = expandTilde(trimmed);
+    // Relative roots have no stable meaning for a daemon, so only absolute paths are kept.
+    if (!path.isAbsolute(expanded)) continue;
+    const resolved = path.resolve(expanded);
+    if (!roots.includes(resolved)) roots.push(resolved);
+  }
+  return roots;
+}
+
 function parseTrustedProxiesEnv(value: string | undefined): TrustedProxiesConfig | undefined {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -612,6 +633,7 @@ export function resolveConfigFromPersisted(
     desktopManaged: env.PASEO_DESKTOP_MANAGED === "1",
     worktreesRoot: resolveWorktreesRoot(paseoHome, persisted),
     corsAllowedOrigins: resolveCorsAllowedOrigins(env, persisted),
+    directorySearchExtraRoots: resolveDirectorySearchExtraRoots(env, persisted),
     hostnames,
     trustedProxies,
     mcpEnabled,
