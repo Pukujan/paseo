@@ -280,14 +280,6 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
-        projectSync: z
-          .object({
-            // Top-level folders of these directories are kept registered as projects: new
-            // folders are added and projects whose folder disappeared are removed.
-            roots: z.array(z.string()).optional(),
-          })
-          .strict()
-          .optional(),
         relay: z
           .object({
             enabled: z.boolean().optional(),

@@ -58,18 +58,16 @@ describe("daemon directory search roots config", () => {
     ]);
   });
 
-  test("loads replacement search roots and project sync roots in order", async () => {
+  test("loads replacement search roots in order", async () => {
     const first = path.join(os.tmpdir(), "dev-root");
     const second = path.parse(os.tmpdir()).root;
     const home = await createHome({
       daemon: {
         directorySearch: { roots: [first, second] },
-        projectSync: { roots: [first] },
       },
     });
     const config = loadConfig(home, { env: {} });
 
     expect(config.directorySearchRoots).toEqual([path.resolve(first), path.resolve(second)]);
-    expect(config.projectSyncRoots).toEqual([path.resolve(first)]);
   });
 });

@@ -470,16 +470,6 @@ export function resolveDirectorySearchRoots(
   ]);
 }
 
-export function resolveProjectSyncRoots(
-  env: NodeJS.ProcessEnv,
-  persisted: Pick<PersistedConfig, "daemon">,
-): string[] {
-  return normalizeConfiguredRoots([
-    ...(persisted.daemon?.projectSync?.roots ?? []),
-    ...splitEnvRoots(env.PASEO_PROJECT_SYNC_ROOTS),
-  ]);
-}
-
 function parseTrustedProxiesEnv(value: string | undefined): TrustedProxiesConfig | undefined {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -662,7 +652,6 @@ export function resolveConfigFromPersisted(
     corsAllowedOrigins: resolveCorsAllowedOrigins(env, persisted),
     directorySearchExtraRoots: resolveDirectorySearchExtraRoots(env, persisted),
     directorySearchRoots: resolveDirectorySearchRoots(env, persisted),
-    projectSyncRoots: resolveProjectSyncRoots(env, persisted),
     hostnames,
     trustedProxies,
     mcpEnabled,

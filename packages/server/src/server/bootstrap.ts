@@ -123,7 +123,6 @@ import { createWorkspaceLabelService } from "./workspace-labels/index.js";
 import { createGitHubService } from "../services/github-service.js";
 import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
-import { ProjectFolderSyncService } from "./project-folder-sync-service.js";
 import { createPaseoWorktreeWorkflow } from "./worktree-session.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import type { OpenAiSpeechProviderConfig } from "./speech/providers/openai/config.js";
@@ -397,8 +396,6 @@ export interface PaseoDaemonConfig {
   directorySearchExtraRoots?: string[];
   /** When non-empty, replaces home as the directory picker's search roots (priority order). */
   directorySearchRoots?: string[];
-  /** Directories whose top-level folders are kept registered as projects. */
-  projectSyncRoots?: string[];
   allowedHosts?: HostnamesConfig;
   hostnames?: HostnamesConfig;
   trustedProxies?: true | string[];
@@ -993,17 +990,6 @@ export async function createPaseoDaemon(
     },
   });
   await workspaceReconciliation.start();
-  const projectFolderSync = new ProjectFolderSyncService({
-    roots: config.projectSyncRoots ?? [],
-    projectRegistry,
-    workspaceRegistry,
-    findOrCreateProjectForDirectory: (cwd) =>
-      workspaceProvisioning.findOrCreateProjectForDirectory(cwd),
-    logger,
-  });
-  void projectFolderSync.start().catch((error) => {
-    logger.warn({ err: error }, "Project folder sync failed to start");
-  });
   void workspaceReconciliation.reconcileNow().catch((error) => {
     logger.warn({ err: error }, "Initial workspace reconciliation failed");
   });
@@ -1814,7 +1800,6 @@ export async function createPaseoDaemon(
     unsubscribePluginProviders();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
-    projectFolderSync.dispose();
     scriptHealthMonitor.stop();
     // Freeze both ingress and registration before taking the agent closure snapshot.
     wsServer?.prepareForShutdown();

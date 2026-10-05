@@ -17,7 +17,6 @@ beforeAll(async () => {
   mkdirSync(path.join(devRoot, ".scratch"));
   daemon = await createTestPaseoDaemon({
     directorySearchRoots: [devRoot],
-    projectSyncRoots: [devRoot],
   });
   client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   await client.connect();
@@ -39,14 +38,3 @@ test("configured roots replace home and a blank query lists the root's folders",
   const home = await client.getDirectorySuggestions({ query: "~", limit: 30 });
   expect(home.directories.some((entry) => entry.startsWith(homedir()))).toBe(false);
 }, 30000);
-
-test("project sync registers new folders and removes deleted ones", async () => {
-  const roots = async () => (await client.listProjects()).projects.map((p) => p.projectRootPath);
-  await expect.poll(roots, { timeout: 10_000 }).toContain(path.join(devRoot, "eval-lab"));
-  expect(await roots()).not.toContain(path.join(devRoot, ".scratch"));
-
-  mkdirSync(path.join(devRoot, "fresh"));
-  await expect.poll(roots, { timeout: 10_000 }).toContain(path.join(devRoot, "fresh"));
-  rmSync(path.join(devRoot, "fresh"), { recursive: true });
-  await expect.poll(roots, { timeout: 10_000 }).not.toContain(path.join(devRoot, "fresh"));
-}, 40000);
