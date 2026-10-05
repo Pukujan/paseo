@@ -17,6 +17,7 @@ export interface DaemonRuntimeConfig {
   listen: string | null;
   worktreesRoot?: string;
   directorySearchExtraRoots?: string[];
+  directorySearchRoots?: string[];
   appBaseUrl?: string;
   desktopManaged?: boolean;
   getRelayConfig(): {

@@ -1168,3 +1168,40 @@ describe("multi-root directory search", () => {
     expect(completed.every((entry) => path.dirname(entry.path) === filesystemRoot)).toBe(true);
   });
 });
+
+describe("configured roots replacing home", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-priority-")));
+    mkdirSync(path.join(tempRoot, "development", "zeta-app"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "development", "eval-lab"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "development", ".scratch"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "aaa-other"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("lists the first root's folders first for a blank query, without hidden folders", async () => {
+    const development = path.join(tempRoot, "development");
+    const entries = await searchDirectoryEntriesInRoots({
+      query: "",
+      pathQueryPolicy: "rooted",
+      blankQueryBehavior: "children",
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder",
+      limit: 30,
+      roots: [{ root: development }, { root: tempRoot }],
+    });
+
+    expect(entries.map((entry) => entry.path)).toEqual([
+      path.join(development, "eval-lab"),
+      path.join(development, "zeta-app"),
+      path.join(tempRoot, "aaa-other"),
+      development,
+    ]);
+  });
+});

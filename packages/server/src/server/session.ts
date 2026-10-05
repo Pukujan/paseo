@@ -5040,11 +5040,9 @@ export class Session {
     matchMode?: "fuzzy" | "suffix";
     limit?: number;
   }) {
-    const homeRoot = process.env.HOME ?? homedir();
     const common = {
       query: request.query,
       pathQueryPolicy: "rooted" as const,
-      blankQueryBehavior: "none" as const,
       traversableHiddenDirectoryNames: [],
       confidentResultScanThreshold: 5_000,
       respectGitIgnore: false,
@@ -5053,10 +5051,25 @@ export class Session {
       matchMode: request.matchMode,
       limit: request.limit,
     };
+    const configuredRoots = this.daemonRuntimeConfig?.directorySearchRoots ?? [];
     const extraRoots = this.daemonRuntimeConfig?.directorySearchExtraRoots ?? [];
+    if (configuredRoots.length > 0) {
+      // Configured roots replace home and act as a priority list; a blank query browses them.
+      return searchDirectoryEntriesInRoots({
+        ...common,
+        blankQueryBehavior: "children",
+        merge: "rootOrder",
+        roots: [...configuredRoots, ...extraRoots].map((root) => ({
+          root,
+          completeFilesystemRootSegments: true,
+        })),
+      });
+    }
+    const homeRoot = process.env.HOME ?? homedir();
     if (extraRoots.length === 0) {
       return searchDirectoryEntries({
         ...common,
+        blankQueryBehavior: "none",
         root: homeRoot,
         pathFormat: "absolute",
         rootAliases: ["~"],
@@ -5064,12 +5077,10 @@ export class Session {
     }
     return searchDirectoryEntriesInRoots({
       ...common,
+      blankQueryBehavior: "none",
       roots: [
         { root: homeRoot, rootAliases: ["~"] },
-        ...extraRoots.map((root) => ({
-          root,
-          completeFilesystemRootSegments: true,
-        })),
+        ...extraRoots.map((root) => ({ root, completeFilesystemRootSegments: true })),
       ],
     });
   }

@@ -432,16 +432,9 @@ function resolveCorsAllowedOrigins(
   );
 }
 
-export function resolveDirectorySearchExtraRoots(
-  env: NodeJS.ProcessEnv,
-  persisted: Pick<PersistedConfig, "daemon">,
-): string[] {
-  const envRoots = env.PASEO_DIRECTORY_SEARCH_EXTRA_ROOTS
-    ? env.PASEO_DIRECTORY_SEARCH_EXTRA_ROOTS.split(path.delimiter)
-    : [];
-  const persistedRoots = persisted.daemon?.directorySearch?.extraRoots ?? [];
+function normalizeConfiguredRoots(rawRoots: readonly string[]): string[] {
   const roots: string[] = [];
-  for (const raw of [...persistedRoots, ...envRoots]) {
+  for (const raw of rawRoots) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
     const expanded = expandTilde(trimmed);
@@ -451,6 +444,40 @@ export function resolveDirectorySearchExtraRoots(
     if (!roots.includes(resolved)) roots.push(resolved);
   }
   return roots;
+}
+
+function splitEnvRoots(value: string | undefined): string[] {
+  return value ? value.split(path.delimiter) : [];
+}
+
+export function resolveDirectorySearchExtraRoots(
+  env: NodeJS.ProcessEnv,
+  persisted: Pick<PersistedConfig, "daemon">,
+): string[] {
+  return normalizeConfiguredRoots([
+    ...(persisted.daemon?.directorySearch?.extraRoots ?? []),
+    ...splitEnvRoots(env.PASEO_DIRECTORY_SEARCH_EXTRA_ROOTS),
+  ]);
+}
+
+export function resolveDirectorySearchRoots(
+  env: NodeJS.ProcessEnv,
+  persisted: Pick<PersistedConfig, "daemon">,
+): string[] {
+  return normalizeConfiguredRoots([
+    ...(persisted.daemon?.directorySearch?.roots ?? []),
+    ...splitEnvRoots(env.PASEO_DIRECTORY_SEARCH_ROOTS),
+  ]);
+}
+
+export function resolveProjectSyncRoots(
+  env: NodeJS.ProcessEnv,
+  persisted: Pick<PersistedConfig, "daemon">,
+): string[] {
+  return normalizeConfiguredRoots([
+    ...(persisted.daemon?.projectSync?.roots ?? []),
+    ...splitEnvRoots(env.PASEO_PROJECT_SYNC_ROOTS),
+  ]);
 }
 
 function parseTrustedProxiesEnv(value: string | undefined): TrustedProxiesConfig | undefined {
@@ -634,6 +661,8 @@ export function resolveConfigFromPersisted(
     worktreesRoot: resolveWorktreesRoot(paseoHome, persisted),
     corsAllowedOrigins: resolveCorsAllowedOrigins(env, persisted),
     directorySearchExtraRoots: resolveDirectorySearchExtraRoots(env, persisted),
+    directorySearchRoots: resolveDirectorySearchRoots(env, persisted),
+    projectSyncRoots: resolveProjectSyncRoots(env, persisted),
     hostnames,
     trustedProxies,
     mcpEnabled,

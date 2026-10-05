@@ -16,6 +16,8 @@ import type { AgentProfile } from "@getpaseo/protocol/messages";
 
 interface TestPaseoDaemonOptions {
   directorySearchExtraRoots?: string[];
+  directorySearchRoots?: string[];
+  projectSyncRoots?: string[];
   daemonVersion?: string;
   desktopManaged?: boolean;
   downloadTokenTtlMs?: number;
@@ -176,6 +178,8 @@ async function prepareTestDaemonConfig(
     desktopManaged: options.desktopManaged,
     corsAllowedOrigins: options.corsAllowedOrigins ?? [],
     directorySearchExtraRoots: options.directorySearchExtraRoots,
+    directorySearchRoots: options.directorySearchRoots,
+    projectSyncRoots: options.projectSyncRoots,
     hostnames: true,
     mcpEnabled: options.mcpEnabled ?? true,
     staticDir,

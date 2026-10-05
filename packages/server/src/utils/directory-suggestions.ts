@@ -51,6 +51,11 @@ export interface SearchDirectoryEntriesInRootsOptions extends Omit<
   "root" | "rootAliases" | "pathFormat" | "completeFilesystemRootSegments"
 > {
   roots: DirectorySearchRoot[];
+  /**
+   * "rank" (default) interleaves every root's results by match quality. "rootOrder" lists all
+   * results from the first root before the next one, so roots act as a priority list.
+   */
+  merge?: "rank" | "rootOrder";
 }
 
 interface QueryPlan {
@@ -177,7 +182,7 @@ export async function searchDirectoryEntries(
 export async function searchDirectoryEntriesInRoots(
   options: SearchDirectoryEntriesInRootsOptions,
 ): Promise<DirectorySuggestionEntry[]> {
-  const { roots, ...common } = options;
+  const { roots, merge, ...common } = options;
   const results = await Promise.all(
     roots.map((searchRoot) =>
       collectRankedEntries({
@@ -191,17 +196,24 @@ export async function searchDirectoryEntriesInRoots(
   );
   const exacts: DirectorySuggestionEntry[] = [];
   const ranked: RankedEntry[] = [];
+  const ordered: DirectorySuggestionEntry[] = [];
   for (const result of results) {
     if (!result) continue;
     if (result.exact && !exacts.some((entry) => sameEntry(entry, result.exact!))) {
       exacts.push(result.exact);
     }
-    ranked.push(...result.ranked);
+    if (merge === "rootOrder") {
+      for (const entry of sortAndFormat(result.ranked, "", "absolute")) {
+        if (!ordered.some((existing) => sameEntry(existing, entry))) ordered.push(entry);
+      }
+    } else {
+      ranked.push(...result.ranked);
+    }
   }
   // Absolute formatting never reads the root, so the merged list needs no single root.
   return prependExactEntries(
     exacts,
-    sortAndFormat(ranked, "", "absolute"),
+    merge === "rootOrder" ? ordered : sortAndFormat(ranked, "", "absolute"),
     normalizeLimit(common.limit),
   );
 }

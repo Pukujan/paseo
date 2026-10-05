@@ -115,6 +115,24 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "roots": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "projectSync": {
+              "type": "object",
+              "properties": {
+                "roots": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "additionalProperties": false

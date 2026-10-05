@@ -35,7 +35,7 @@ describe("daemon directory search roots config", () => {
   });
 
   test("rejects unknown keys under daemon.directorySearch", async () => {
-    const home = await createHome({ daemon: { directorySearch: { roots: ["/"] } } });
+    const home = await createHome({ daemon: { directorySearch: { rootz: ["/"] } } });
 
     expect(() => loadConfig(home, { env: {} })).toThrow();
   });
@@ -56,5 +56,20 @@ describe("daemon directory search roots config", () => {
       path.resolve(process.env.HOME || os.homedir()),
       path.resolve(second),
     ]);
+  });
+
+  test("loads replacement search roots and project sync roots in order", async () => {
+    const first = path.join(os.tmpdir(), "dev-root");
+    const second = path.parse(os.tmpdir()).root;
+    const home = await createHome({
+      daemon: {
+        directorySearch: { roots: [first, second] },
+        projectSync: { roots: [first] },
+      },
+    });
+    const config = loadConfig(home, { env: {} });
+
+    expect(config.directorySearchRoots).toEqual([path.resolve(first), path.resolve(second)]);
+    expect(config.projectSyncRoots).toEqual([path.resolve(first)]);
   });
 });
