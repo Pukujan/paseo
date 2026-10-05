@@ -394,6 +394,10 @@ export interface PaseoDaemonConfig {
   desktopManaged?: boolean;
   worktreesRoot?: string;
   corsAllowedOrigins: string[];
+  /** Absolute directories searched by the app's directory picker in addition to home. */
+  directorySearchExtraRoots?: string[];
+  /** When non-empty, replaces home as the directory picker's search roots (priority order). */
+  directorySearchRoots?: string[];
   allowedHosts?: HostnamesConfig;
   hostnames?: HostnamesConfig;
   trustedProxies?: true | string[];
@@ -1719,6 +1723,8 @@ export async function createPaseoDaemon(
               {
                 listen: formatListenTarget(boundListenTarget ?? listenTarget),
                 worktreesRoot: config.worktreesRoot,
+                directorySearchExtraRoots: config.directorySearchExtraRoots,
+                directorySearchRoots: config.directorySearchRoots,
                 get appBaseUrl() {
                   return appBaseUrl;
                 },

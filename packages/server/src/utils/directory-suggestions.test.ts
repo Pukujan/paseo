@@ -17,6 +17,7 @@ import { startPathContainmentMetrics, stopPathContainmentMetrics } from "./path.
 import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
 import {
   searchDirectoryEntries,
+  searchDirectoryEntriesInRoots,
   WORKSPACE_SEARCH_HIDDEN_DIRECTORIES,
 } from "./directory-suggestions.js";
 
@@ -1085,5 +1086,241 @@ describe("filesystem threads held by concurrent searches", () => {
     const peak = await peakPendingFilesystemRequests(searchWhileTyping);
 
     expect(peak).toBe(1);
+  });
+});
+
+describe("multi-root directory search", () => {
+  let tempRoot: string;
+  let homeDir: string;
+  let extraRoot: string;
+
+  const homeSearch = {
+    pathQueryPolicy: "rooted" as const,
+    blankQueryBehavior: "none" as const,
+    includeFiles: false,
+    includeDirectories: true,
+    confidentResultScanThreshold: 5_000,
+  };
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-roots-")));
+    homeDir = path.join(tempRoot, "home");
+    extraRoot = path.join(tempRoot, "drive-d");
+    // Home holds many weak "development" matches deep in the tree; the extra root holds the
+    // strong top-level match that must not be crowded out by the shared result limit.
+    for (let index = 0; index < 40; index += 1) {
+      mkdirSync(path.join(homeDir, "docs", `skills-${index}`, "software-development-notes"), {
+        recursive: true,
+      });
+    }
+    mkdirSync(path.join(extraRoot, "development", "eval-lab"), { recursive: true });
+    mkdirSync(path.join(extraRoot, "development", "octo-db"), { recursive: true });
+    mkdirSync(path.join(extraRoot, "development", "node_modules", "development-pkg"), {
+      recursive: true,
+    });
+    mkdirSync(path.join(extraRoot, "$RECYCLE.BIN", "development-trash"), { recursive: true });
+    mkdirSync(path.join(extraRoot, "System Volume Information", "development-index"), {
+      recursive: true,
+    });
+    mkdirSync(path.join(extraRoot, "$Recycle.Bin", "eval-lab-deleted"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("ranks a strong match from an extra root ahead of weak home matches", async () => {
+    const entries = await searchDirectoryEntriesInRoots({
+      ...homeSearch,
+      query: "development",
+      limit: 30,
+      roots: [{ root: homeDir, rootAliases: ["~"] }, { root: extraRoot }],
+    });
+    const paths = entries.map((entry) => entry.path);
+
+    expect(paths[0]).toBe(path.join(extraRoot, "development"));
+    expect(paths.length).toBeLessThanOrEqual(30);
+    expect(paths.some((entry) => entry.startsWith(homeDir))).toBe(true);
+  });
+
+  it("keeps home-only results identical when no extra root is configured", async () => {
+    const options = { ...homeSearch, query: "software", limit: 10 };
+    const single = await searchDirectoryEntries({
+      ...options,
+      root: homeDir,
+      rootAliases: ["~"],
+      pathFormat: "absolute",
+    });
+    const multi = await searchDirectoryEntriesInRoots({
+      ...options,
+      roots: [{ root: homeDir, rootAliases: ["~"] }],
+    });
+
+    expect(multi).toEqual(single);
+  });
+
+  it("answers a typed absolute path only from the root that contains it", async () => {
+    const entries = await searchDirectoryEntriesInRoots({
+      ...homeSearch,
+      query: `${path.join(extraRoot, "development")}${path.sep}`,
+      roots: [{ root: homeDir, rootAliases: ["~"] }, { root: extraRoot }],
+    });
+
+    expect(entries.map((entry) => entry.path)).toEqual([
+      path.join(extraRoot, "development"),
+      path.join(extraRoot, "development", "eval-lab"),
+      path.join(extraRoot, "development", "octo-db"),
+    ]);
+  });
+
+  it("completes a partial absolute path inside an extra root", async () => {
+    const entries = await searchDirectoryEntriesInRoots({
+      ...homeSearch,
+      query: path.join(extraRoot, "development", "ev"),
+      roots: [{ root: homeDir, rootAliases: ["~"] }, { root: extraRoot }],
+    });
+
+    expect(entries[0]?.path).toBe(path.join(extraRoot, "development", "eval-lab"));
+    expect(entries.every((entry) => entry.path.startsWith(extraRoot))).toBe(true);
+  });
+
+  it("never discovers recycle-bin, volume-information, or dependency directories", async () => {
+    const entries = await searchDirectoryEntriesInRoots({
+      ...homeSearch,
+      query: "development",
+      limit: 100,
+      roots: [{ root: extraRoot }],
+    });
+    const deleted = await searchDirectoryEntriesInRoots({
+      ...homeSearch,
+      query: "eval-lab",
+      limit: 100,
+      roots: [{ root: extraRoot }],
+    });
+    const paths = [...entries, ...deleted].map((entry) => entry.path.toLowerCase());
+
+    expect(paths.some((entry) => entry.includes("$recycle.bin"))).toBe(false);
+    expect(paths.some((entry) => entry.includes("system volume information"))).toBe(false);
+    expect(paths.some((entry) => entry.includes("node_modules"))).toBe(false);
+  });
+
+  it("completes an incomplete drive-root segment only when the root opts in", async () => {
+    const filesystemRoot = path.parse(tempRoot).root;
+    const exactPath = path.join(filesystemRoot, filesystemRootDirectoryName);
+    const incompletePath = exactPath.slice(0, -1);
+    const common = { ...homeSearch, query: incompletePath, limit: 10 };
+
+    await expect(
+      searchDirectoryEntriesInRoots({ ...common, roots: [{ root: filesystemRoot }] }),
+    ).resolves.toEqual([]);
+
+    const completed = await searchDirectoryEntriesInRoots({
+      ...common,
+      roots: [{ root: filesystemRoot, completeFilesystemRootSegments: true }],
+    });
+    expect(completed.map((entry) => entry.path)).toContain(exactPath);
+    expect(completed.every((entry) => path.dirname(entry.path) === filesystemRoot)).toBe(true);
+  });
+});
+
+describe("configured roots replacing home", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-priority-")));
+    mkdirSync(path.join(tempRoot, "development", "zeta-app"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "development", "eval-lab"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "development", ".scratch"), { recursive: true });
+    mkdirSync(path.join(tempRoot, "aaa-other"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("lists the first root's folders first for a blank query, without hidden folders", async () => {
+    const development = path.join(tempRoot, "development");
+    const entries = await searchDirectoryEntriesInRoots({
+      query: "",
+      pathQueryPolicy: "rooted",
+      blankQueryBehavior: "children",
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder",
+      limit: 30,
+      roots: [{ root: development }, { root: tempRoot }],
+    });
+
+    expect(entries.map((entry) => entry.path)).toEqual([
+      path.join(development, "eval-lab"),
+      path.join(development, "zeta-app"),
+      path.join(tempRoot, "aaa-other"),
+      development,
+    ]);
+  });
+});
+
+describe("configured roots result cap", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-cap-")));
+    for (let index = 0; index < 150; index += 1) {
+      mkdirSync(path.join(tempRoot, `project-${String(index).padStart(3, "0")}`));
+    }
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("returns more than 100 entries when the cap is raised", async () => {
+    const common = {
+      query: "",
+      pathQueryPolicy: "rooted" as const,
+      blankQueryBehavior: "children" as const,
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder" as const,
+      roots: [{ root: tempRoot }],
+    };
+    const capped = await searchDirectoryEntriesInRoots({ ...common, limit: 500 });
+    const raised = await searchDirectoryEntriesInRoots({ ...common, limit: 500, maxLimit: 500 });
+
+    expect(capped).toHaveLength(100);
+    expect(raised).toHaveLength(150);
+  });
+});
+
+describe("typed absolute path entries", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-typed-")));
+    mkdirSync(path.join(tempRoot, "development", "x-project", "src"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("returns the typed directory first in canonical form, in any slash style", async () => {
+    const target = path.join(tempRoot, "development", "x-project");
+    const common = {
+      pathQueryPolicy: "rooted" as const,
+      blankQueryBehavior: "children" as const,
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder" as const,
+      includeTypedPath: true,
+      roots: [{ root: path.join(tempRoot, "development") }],
+    };
+    const queries = [target, target.split(path.sep).join("/"), `${target}${path.sep}`];
+    for (const query of queries) {
+      const entries = await searchDirectoryEntriesInRoots({ ...common, query });
+      expect(entries[0]).toEqual({ path: target, kind: "directory" });
+    }
+    const outside = await searchDirectoryEntriesInRoots({ ...common, query: tempRoot });
+    expect(outside.some((entry) => entry.path === tempRoot)).toBe(false);
   });
 });

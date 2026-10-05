@@ -33,6 +33,38 @@ export interface SearchDirectoryEntriesOptions {
   maxEntriesScanned?: number;
   confidentResultScanThreshold?: number;
   respectGitIgnore?: boolean;
+  /**
+   * When the root is a filesystem root (for example `D:\\` or `/`) and the query is a single
+   * incomplete absolute segment that is not an existing directory (`D:\\dev`), suggest the
+   * root's children that match the segment instead of returning nothing.
+   */
+  completeFilesystemRootSegments?: boolean;
+  /** Raises the result cap above the default maximum of 100 (configured-roots browsing). */
+  maxLimit?: number;
+}
+
+export interface DirectorySearchRoot {
+  root: string;
+  rootAliases?: string[];
+  completeFilesystemRootSegments?: boolean;
+}
+
+export interface SearchDirectoryEntriesInRootsOptions extends Omit<
+  SearchDirectoryEntriesOptions,
+  "root" | "rootAliases" | "pathFormat" | "completeFilesystemRootSegments"
+> {
+  roots: DirectorySearchRoot[];
+  /**
+   * "rank" (default) interleaves every root's results by match quality. "rootOrder" lists all
+   * results from the first root before the next one, so roots act as a priority list.
+   */
+  merge?: "rank" | "rootOrder";
+  /**
+   * When the query is an absolute path to an existing directory inside one of the roots, return
+   * that directory first in its canonical form (any slash style or drive-letter case), so a
+   * client can always pick the exact folder that was typed.
+   */
+  includeTypedPath?: boolean;
 }
 
 interface QueryPlan {
@@ -157,6 +189,14 @@ const IGNORED_DIRECTORY_NAMES = new Set([
   "__pycache__",
   ".git",
 ]);
+// Operating-system bookkeeping directories that sit at drive roots on Windows. They are never
+// projects, are often unreadable, and can be large, so discovery never descends into them.
+const IGNORED_SYSTEM_DIRECTORY_NAMES = new Set([
+  "$recycle.bin",
+  "system volume information",
+  "$winreagent",
+  "config.msi",
+]);
 const directoryListCache = new Map<string, DirectoryListCacheEntry>();
 const gitIgnoredPathsCache = new Map<string, GitIgnoredPathsCacheEntry>();
 
@@ -168,29 +208,134 @@ const gitIgnoredPathsCache = new Map<string, GitIgnoredPathsCacheEntry>();
 export async function searchDirectoryEntries(
   options: SearchDirectoryEntriesOptions,
 ): Promise<DirectorySuggestionEntry[]> {
+  const result = await collectRankedEntries(options);
+  if (!result) return [];
+  const results = sortAndFormat(result.ranked, result.input.root, result.input.pathFormat);
+  return prependExactEntries(result.exact ? [result.exact] : [], results, result.input.limit);
+}
+
+/**
+ * Searches several roots at once and merges their results by rank, so a strong match in one
+ * root is not crowded out by weak matches in another. Results are always absolute paths and
+ * share one result limit. A typed absolute path is answered only by the root that contains it.
+ */
+export async function searchDirectoryEntriesInRoots(
+  options: SearchDirectoryEntriesInRootsOptions,
+): Promise<DirectorySuggestionEntry[]> {
+  const { roots, merge, includeTypedPath, ...common } = options;
+  const results = await Promise.all(
+    roots.map((searchRoot) =>
+      collectRankedEntries({
+        ...common,
+        root: searchRoot.root,
+        rootAliases: searchRoot.rootAliases,
+        completeFilesystemRootSegments: searchRoot.completeFilesystemRootSegments,
+        pathFormat: "absolute",
+      }),
+    ),
+  );
+  const exacts: DirectorySuggestionEntry[] = [];
+  const typed = includeTypedPath ? await resolveTypedDirectory(common.query, roots) : null;
+  if (typed) exacts.push(typed);
+  const ranked: RankedEntry[] = [];
+  const ordered: DirectorySuggestionEntry[] = [];
+  for (const result of results) {
+    if (!result) continue;
+    if (result.exact && !exacts.some((entry) => sameEntry(entry, result.exact!))) {
+      exacts.push(result.exact);
+    }
+    if (merge === "rootOrder") {
+      for (const entry of sortAndFormat(result.ranked, "", "absolute")) {
+        if (!ordered.some((existing) => sameEntry(existing, entry))) ordered.push(entry);
+      }
+    } else {
+      ranked.push(...result.ranked);
+    }
+  }
+  // Absolute formatting never reads the root, so the merged list needs no single root.
+  return prependExactEntries(
+    exacts,
+    merge === "rootOrder" ? ordered : sortAndFormat(ranked, "", "absolute"),
+    normalizeLimit(common.limit, common.maxLimit),
+  );
+}
+
+async function resolveTypedDirectory(
+  query: string,
+  roots: DirectorySearchRoot[],
+): Promise<DirectorySuggestionEntry | null> {
+  const typed = query.trim();
+  if (!typed || !path.isAbsolute(typed)) return null;
+  const canonical = await realpath(path.resolve(typed)).catch(() => null);
+  if (!canonical) return null;
+  const info = await stat(canonical).catch(() => null);
+  if (!info?.isDirectory()) return null;
+  const insideRoot = await Promise.all(
+    roots.map(async (searchRoot) => {
+      const root = await resolveDirectory(searchRoot.root);
+      return root !== null && isPathInsideRoot(root, canonical);
+    }),
+  );
+  return insideRoot.some(Boolean) ? { path: canonical, kind: "directory" } : null;
+}
+
+function prependExactEntries(
+  exacts: DirectorySuggestionEntry[],
+  results: DirectorySuggestionEntry[],
+  limit: number,
+): DirectorySuggestionEntry[] {
+  if (exacts.length === 0) return results.slice(0, limit);
+  return [
+    ...exacts,
+    ...results.filter((entry) => !exacts.some((exact) => sameEntry(entry, exact))),
+  ].slice(0, limit);
+}
+
+interface RankedSearchResult {
+  input: SearchInput;
+  exact: DirectorySuggestionEntry | null;
+  ranked: RankedEntry[];
+}
+
+async function collectRankedEntries(
+  options: SearchDirectoryEntriesOptions,
+): Promise<RankedSearchResult | null> {
   const root = await resolveDirectory(options.root);
-  if (!root) return [];
+  if (!root) return null;
 
   const gitIgnoredPaths = options.respectGitIgnore
     ? await loadGitIgnoredPaths(root)
     : new Set<string>();
   const input = buildSearchInput(options, root, gitIgnoredPaths);
-  if (!input) return [];
+  if (!input) return null;
 
   const exact =
     input.plan.browseExactPath || (input.matchMode === "suffix" && input.plan.isPathQuery)
       ? await findExactEntry(input)
       : null;
-  if (exact && input.limit === 1) return [exact];
+  if (exact && input.limit === 1) return { input, exact, ranked: [] };
 
   const browsesRoot = input.plan.isPathQuery && !input.plan.normalizedQuery;
   const browsesAbsoluteParent = input.plan.browseExactPath === true;
-  const ranked =
+  let ranked =
     browsesRoot || browsesAbsoluteParent ? await searchChildren(input) : await searchTree(input);
-  const results = sortAndFormat(ranked, input.root, input.pathFormat).slice(0, input.limit);
-  return exact
-    ? [exact, ...results.filter((entry) => !sameEntry(entry, exact))].slice(0, input.limit)
-    : results;
+  if (
+    browsesAbsoluteParent &&
+    !exact &&
+    ranked.length === 0 &&
+    options.completeFilesystemRootSegments
+  ) {
+    ranked = await searchChildren({
+      ...input,
+      plan: {
+        isPathQuery: true,
+        parentPart: "",
+        searchTerm: input.plan.normalizedQuery,
+        normalizedQuery: input.plan.normalizedQuery,
+      },
+    });
+  }
+  return { input, exact, ranked };
 }
 
 function buildSearchInput(
@@ -220,7 +365,7 @@ function buildSearchInput(
     matchMode: options.matchMode ?? "fuzzy",
     pathFormat: options.pathFormat,
     hiddenDirectoryNames: new Set(options.traversableHiddenDirectoryNames ?? []),
-    limit: normalizeLimit(options.limit),
+    limit: normalizeLimit(options.limit, options.maxLimit),
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxEntriesScanned: options.maxEntriesScanned ?? DEFAULT_MAX_ENTRIES_SCANNED,
     confidentResultScanThreshold: options.confidentResultScanThreshold,
@@ -374,6 +519,7 @@ function shouldDiscover(entry: ChildEntry, input: SearchInput): boolean {
     return input.includeFiles && !entry.name.startsWith(".");
   }
   if (IGNORED_DIRECTORY_NAMES.has(entry.name)) return false;
+  if (IGNORED_SYSTEM_DIRECTORY_NAMES.has(entry.name.toLowerCase())) return false;
   if (!entry.name.startsWith(".")) return true;
   return input.hiddenDirectoryNames.has(entry.name);
 }
@@ -785,10 +931,10 @@ function pruneCache(): void {
   }
 }
 
-function normalizeLimit(limit: number | undefined): number {
+function normalizeLimit(limit: number | undefined, maxLimit = MAX_LIMIT): number {
   const candidate =
     typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : DEFAULT_LIMIT;
-  return Math.max(1, Math.min(MAX_LIMIT, candidate));
+  return Math.max(1, Math.min(Math.max(MAX_LIMIT, maxLimit), candidate));
 }
 
 function normalizeRelativePath(root: string, absolutePath: string): string {

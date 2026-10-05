@@ -217,6 +217,7 @@ import {
 import { expandTilde } from "../utils/path.js";
 import {
   searchDirectoryEntries,
+  searchDirectoryEntriesInRoots,
   WORKSPACE_SEARCH_HIDDEN_DIRECTORIES,
 } from "../utils/directory-suggestions.js";
 import type { CheckoutDiffManager } from "./checkout-diff-manager.js";
@@ -670,6 +671,8 @@ interface ClientActivity {
   appVisibilityChangedAt: Date;
 }
 
+const CONFIGURED_ROOTS_RESULT_LIMIT = 500;
+
 export class Session {
   readonly delivery = new SessionDelivery(
     (source, message) => {
@@ -716,6 +719,7 @@ export class Session {
     | null;
   private readonly sessionLogger: pino.Logger;
   private readonly paseoHome: string;
+  private readonly daemonRuntimeConfig: DaemonRuntimeConfig | undefined;
   private readonly projectIcons: ProjectIconReader;
   private readonly worktreesRoot: string | undefined;
   private readonly rewindInitiators = new Map<string, object | undefined>();
@@ -857,6 +861,7 @@ export class Session {
       getWebSocketRuntimeMetrics,
     } = options;
     this.browserToolsBroker = options.browserToolsBroker;
+    this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.clientId = clientId;
     this.authorization = new SessionAuthorization(permissions);
     this.appVersion = appVersion ?? null;
@@ -5050,29 +5055,92 @@ export class Session {
     }
   }
 
+  private searchHomeDirectoryEntries(request: {
+    query: string;
+    includeFiles?: boolean;
+    includeDirectories?: boolean;
+    matchMode?: "fuzzy" | "suffix";
+    limit?: number;
+  }) {
+    const common = {
+      query: request.query,
+      pathQueryPolicy: "rooted" as const,
+      traversableHiddenDirectoryNames: [],
+      confidentResultScanThreshold: 5_000,
+      respectGitIgnore: false,
+      includeFiles: request.includeFiles,
+      includeDirectories: request.includeDirectories,
+      matchMode: request.matchMode,
+      limit: request.limit,
+    };
+    const configuredRoots = this.daemonRuntimeConfig?.directorySearchRoots ?? [];
+    const extraRoots = this.daemonRuntimeConfig?.directorySearchExtraRoots ?? [];
+    if (configuredRoots.length > 0) {
+      // Configured roots replace home and act as a priority list; a blank query browses them.
+      // The client's small page size is ignored so a root's full listing comes back, and the
+      // confident-result early stop is off so every root is scanned to its normal budget.
+      return searchDirectoryEntriesInRoots({
+        ...common,
+        limit: CONFIGURED_ROOTS_RESULT_LIMIT,
+        maxLimit: CONFIGURED_ROOTS_RESULT_LIMIT,
+        confidentResultScanThreshold: undefined,
+        includeTypedPath: true,
+        blankQueryBehavior: "children",
+        merge: "rootOrder",
+        roots: [...configuredRoots, ...extraRoots].map((root) => ({
+          root,
+          completeFilesystemRootSegments: true,
+        })),
+      });
+    }
+    const homeRoot = process.env.HOME ?? homedir();
+    if (extraRoots.length === 0) {
+      return searchDirectoryEntries({
+        ...common,
+        blankQueryBehavior: "none",
+        root: homeRoot,
+        pathFormat: "absolute",
+        rootAliases: ["~"],
+      });
+    }
+    return searchDirectoryEntriesInRoots({
+      ...common,
+      blankQueryBehavior: "none",
+      roots: [
+        { root: homeRoot, rootAliases: ["~"] },
+        ...extraRoots.map((root) => ({ root, completeFilesystemRootSegments: true })),
+      ],
+    });
+  }
+
   private async handleDirectorySuggestionsRequest(msg: DirectorySuggestionsRequest): Promise<void> {
     const { query, limit, requestId, cwd, includeFiles, includeDirectories, matchMode } = msg;
 
     try {
       const workspaceCwd = cwd?.trim();
-      const searchesWorkspace = Boolean(workspaceCwd);
-      const entries = await searchDirectoryEntries({
-        root: workspaceCwd ? expandTilde(workspaceCwd) : (process.env.HOME ?? homedir()),
-        query,
-        pathFormat: searchesWorkspace ? "relative" : "absolute",
-        pathQueryPolicy: searchesWorkspace ? "slashes" : "rooted",
-        blankQueryBehavior: searchesWorkspace ? "children" : "none",
-        rootAliases: searchesWorkspace ? [] : ["~"],
-        traversableHiddenDirectoryNames: searchesWorkspace
-          ? WORKSPACE_SEARCH_HIDDEN_DIRECTORIES
-          : [],
-        confidentResultScanThreshold: searchesWorkspace ? undefined : 5_000,
-        respectGitIgnore: searchesWorkspace,
-        includeFiles,
-        includeDirectories,
-        matchMode,
-        limit,
-      });
+      const entries = workspaceCwd
+        ? await searchDirectoryEntries({
+            root: expandTilde(workspaceCwd),
+            query,
+            pathFormat: "relative",
+            pathQueryPolicy: "slashes",
+            blankQueryBehavior: "children",
+            rootAliases: [],
+            traversableHiddenDirectoryNames: WORKSPACE_SEARCH_HIDDEN_DIRECTORIES,
+            confidentResultScanThreshold: undefined,
+            respectGitIgnore: true,
+            includeFiles,
+            includeDirectories,
+            matchMode,
+            limit,
+          })
+        : await this.searchHomeDirectoryEntries({
+            query,
+            includeFiles,
+            includeDirectories,
+            matchMode,
+            limit,
+          });
       const directories = entries
         .filter((entry) => entry.kind === "directory")
         .map((entry) => entry.path);

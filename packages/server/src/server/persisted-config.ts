@@ -269,6 +269,18 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
+        directorySearch: z
+          .object({
+            // Directories searched by the app's "Search for directory" picker in addition to
+            // the daemon user's home directory, e.g. ["D:\\"]. Defaults to home only.
+            extraRoots: z.array(z.string()).optional(),
+            // When set, these directories REPLACE home as the picker's search roots, in priority
+            // order (results from the first root are listed first). A blank query lists the
+            // children of each root.
+            roots: z.array(z.string()).optional(),
+          })
+          .strict()
+          .optional(),
         relay: z
           .object({
             enabled: z.boolean().optional(),
