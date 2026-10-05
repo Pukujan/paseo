@@ -38,6 +38,8 @@ export interface SearchDirectoryEntriesOptions {
    * root's children that match the segment instead of returning nothing.
    */
   completeFilesystemRootSegments?: boolean;
+  /** Raises the result cap above the default maximum of 100 (configured-roots browsing). */
+  maxLimit?: number;
 }
 
 export interface DirectorySearchRoot {
@@ -214,7 +216,7 @@ export async function searchDirectoryEntriesInRoots(
   return prependExactEntries(
     exacts,
     merge === "rootOrder" ? ordered : sortAndFormat(ranked, "", "absolute"),
-    normalizeLimit(common.limit),
+    normalizeLimit(common.limit, common.maxLimit),
   );
 }
 
@@ -304,7 +306,7 @@ function buildSearchInput(
     matchMode: options.matchMode ?? "fuzzy",
     pathFormat: options.pathFormat,
     hiddenDirectoryNames: new Set(options.traversableHiddenDirectoryNames ?? []),
-    limit: normalizeLimit(options.limit),
+    limit: normalizeLimit(options.limit, options.maxLimit),
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxEntriesScanned: options.maxEntriesScanned ?? DEFAULT_MAX_ENTRIES_SCANNED,
     confidentResultScanThreshold: options.confidentResultScanThreshold,
@@ -870,10 +872,10 @@ function pruneCache(): void {
   }
 }
 
-function normalizeLimit(limit: number | undefined): number {
+function normalizeLimit(limit: number | undefined, maxLimit = MAX_LIMIT): number {
   const candidate =
     typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : DEFAULT_LIMIT;
-  return Math.max(1, Math.min(MAX_LIMIT, candidate));
+  return Math.max(1, Math.min(Math.max(MAX_LIMIT, maxLimit), candidate));
 }
 
 function normalizeRelativePath(root: string, absolutePath: string): string {

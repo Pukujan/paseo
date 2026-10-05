@@ -1205,3 +1205,35 @@ describe("configured roots replacing home", () => {
     ]);
   });
 });
+
+describe("configured roots result cap", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-cap-")));
+    for (let index = 0; index < 150; index += 1) {
+      mkdirSync(path.join(tempRoot, `project-${String(index).padStart(3, "0")}`));
+    }
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("returns more than 100 entries when the cap is raised", async () => {
+    const common = {
+      query: "",
+      pathQueryPolicy: "rooted" as const,
+      blankQueryBehavior: "children" as const,
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder" as const,
+      roots: [{ root: tempRoot }],
+    };
+    const capped = await searchDirectoryEntriesInRoots({ ...common, limit: 500 });
+    const raised = await searchDirectoryEntriesInRoots({ ...common, limit: 500, maxLimit: 500 });
+
+    expect(capped).toHaveLength(100);
+    expect(raised).toHaveLength(150);
+  });
+});

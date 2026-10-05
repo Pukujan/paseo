@@ -661,6 +661,8 @@ interface ClientActivity {
   appVisibilityChangedAt: Date;
 }
 
+const CONFIGURED_ROOTS_RESULT_LIMIT = 500;
+
 export class Session {
   readonly delivery = new SessionDelivery(
     (source, message) => {
@@ -5055,8 +5057,13 @@ export class Session {
     const extraRoots = this.daemonRuntimeConfig?.directorySearchExtraRoots ?? [];
     if (configuredRoots.length > 0) {
       // Configured roots replace home and act as a priority list; a blank query browses them.
+      // The client's small page size is ignored so a root's full listing comes back, and the
+      // confident-result early stop is off so every root is scanned to its normal budget.
       return searchDirectoryEntriesInRoots({
         ...common,
+        limit: CONFIGURED_ROOTS_RESULT_LIMIT,
+        maxLimit: CONFIGURED_ROOTS_RESULT_LIMIT,
+        confidentResultScanThreshold: undefined,
         blankQueryBehavior: "children",
         merge: "rootOrder",
         roots: [...configuredRoots, ...extraRoots].map((root) => ({
