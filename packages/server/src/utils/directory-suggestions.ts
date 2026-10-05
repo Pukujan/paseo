@@ -58,6 +58,12 @@ export interface SearchDirectoryEntriesInRootsOptions extends Omit<
    * results from the first root before the next one, so roots act as a priority list.
    */
   merge?: "rank" | "rootOrder";
+  /**
+   * When the query is an absolute path to an existing directory inside one of the roots, return
+   * that directory first in its canonical form (any slash style or drive-letter case), so a
+   * client can always pick the exact folder that was typed.
+   */
+  includeTypedPath?: boolean;
 }
 
 interface QueryPlan {
@@ -184,7 +190,7 @@ export async function searchDirectoryEntries(
 export async function searchDirectoryEntriesInRoots(
   options: SearchDirectoryEntriesInRootsOptions,
 ): Promise<DirectorySuggestionEntry[]> {
-  const { roots, merge, ...common } = options;
+  const { roots, merge, includeTypedPath, ...common } = options;
   const results = await Promise.all(
     roots.map((searchRoot) =>
       collectRankedEntries({
@@ -197,6 +203,8 @@ export async function searchDirectoryEntriesInRoots(
     ),
   );
   const exacts: DirectorySuggestionEntry[] = [];
+  const typed = includeTypedPath ? await resolveTypedDirectory(common.query, roots) : null;
+  if (typed) exacts.push(typed);
   const ranked: RankedEntry[] = [];
   const ordered: DirectorySuggestionEntry[] = [];
   for (const result of results) {
@@ -218,6 +226,25 @@ export async function searchDirectoryEntriesInRoots(
     merge === "rootOrder" ? ordered : sortAndFormat(ranked, "", "absolute"),
     normalizeLimit(common.limit, common.maxLimit),
   );
+}
+
+async function resolveTypedDirectory(
+  query: string,
+  roots: DirectorySearchRoot[],
+): Promise<DirectorySuggestionEntry | null> {
+  const typed = query.trim();
+  if (!typed || !path.isAbsolute(typed)) return null;
+  const canonical = await realpath(path.resolve(typed)).catch(() => null);
+  if (!canonical) return null;
+  const info = await stat(canonical).catch(() => null);
+  if (!info?.isDirectory()) return null;
+  const insideRoot = await Promise.all(
+    roots.map(async (searchRoot) => {
+      const root = await resolveDirectory(searchRoot.root);
+      return root !== null && isPathInsideRoot(root, canonical);
+    }),
+  );
+  return insideRoot.some(Boolean) ? { path: canonical, kind: "directory" } : null;
 }
 
 function prependExactEntries(

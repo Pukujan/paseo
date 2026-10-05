@@ -5064,6 +5064,7 @@ export class Session {
         limit: CONFIGURED_ROOTS_RESULT_LIMIT,
         maxLimit: CONFIGURED_ROOTS_RESULT_LIMIT,
         confidentResultScanThreshold: undefined,
+        includeTypedPath: true,
         blankQueryBehavior: "children",
         merge: "rootOrder",
         roots: [...configuredRoots, ...extraRoots].map((root) => ({

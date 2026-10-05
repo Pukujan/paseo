@@ -1237,3 +1237,36 @@ describe("configured roots result cap", () => {
     expect(raised).toHaveLength(150);
   });
 });
+
+describe("typed absolute path entries", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = realpathSync.native(mkdtempSync(path.join(tmpdir(), "directory-typed-")));
+    mkdirSync(path.join(tempRoot, "development", "x-project", "src"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("returns the typed directory first in canonical form, in any slash style", async () => {
+    const target = path.join(tempRoot, "development", "x-project");
+    const common = {
+      pathQueryPolicy: "rooted" as const,
+      blankQueryBehavior: "children" as const,
+      includeDirectories: true,
+      includeFiles: false,
+      merge: "rootOrder" as const,
+      includeTypedPath: true,
+      roots: [{ root: path.join(tempRoot, "development") }],
+    };
+    const queries = [target, target.split(path.sep).join("/"), `${target}${path.sep}`];
+    for (const query of queries) {
+      const entries = await searchDirectoryEntriesInRoots({ ...common, query });
+      expect(entries[0]).toEqual({ path: target, kind: "directory" });
+    }
+    const outside = await searchDirectoryEntriesInRoots({ ...common, query: tempRoot });
+    expect(outside.some((entry) => entry.path === tempRoot)).toBe(false);
+  });
+});
