@@ -1,8 +1,8 @@
 {
   "schema_version": "0.1.0",
   "project": "Paseo fork (Pukujan/paseo) ACS adopter",
-  "recorded_at": "2026-10-04T17:45:00Z",
-  "notes": "ACS multi-agent-hotload adopter state for the Pukujan/paseo fork. Live join/continue order wins; the seed list is a hint only. FULL PCM (4e23854, CLI 0.6.0) + FULL CGM 0.5.12 (6831f91e, eight modules) are pinned. OIO 0.1.0 is named in stack-manifest.json but its files are not installed yet because AGENTS.md is a symlink to upstream CLAUDE.md (see issue #1). Boss lease is minutes (default 30, range 15-120); the watchdog is agent-less and liveness-only. The decision-boss seat is vacant until the first live continuer claims it.",
+  "recorded_at": "2026-10-06T00:00:00Z",
+  "notes": "ACS multi-agent-hotload adopter state for the Pukujan/paseo fork. Live join/continue order wins; the seed list is a hint only. FULL PCM (851bcf72, CLI 0.7.0) + FULL CGM 0.5.12 (62340f3d, eight modules) are pinned. OIO 0.1.0 (bdbdb55) is installed via its own installer; AGENTS.md is a real file that points at upstream CLAUDE.md and carries the PCM issue-log-format and OIO guidance blocks (closes issue #1). Boss lease is minutes (default 30, range 15-120); the watchdog is agent-less and liveness-only. The decision-boss seat is vacant until the first live continuer claims it.",
   "role_fill": {
     "mode": "join_continue_order",
     "seed_is_hint_only": true,
@@ -48,13 +48,13 @@
     "acs": {
       "repo": "https://github.com/Pukujan/agent-custom-setup",
       "module": "modules/coordination/multi-agent-hotload/v0.1.0",
-      "version": "0.1.0",
-      "revision": "3a381eba11c6262c702f5d696878c371342e859a"
+      "version": "0.2.0",
+      "revision": "25be219bb7341addba8849a8ffb6dba8695ff17d"
     },
     "pcm": {
       "repo": "https://github.com/Pukujan/project-continuity-modules",
-      "revision": "4e2385474b4af9249ca009cbdcb38c4498932475",
-      "cli_version": "0.6.0",
+      "revision": "851bcf72eb618e6fe4f49c3f0b8e26fefb90410f",
+      "cli_version": "0.7.0",
       "protocol": "0.1.0-draft",
       "role": "full_stack",
       "required_features": [
@@ -71,7 +71,7 @@
     },
     "cgm": {
       "repo": "https://github.com/Pukujan/content-generation-modules",
-      "revision": "6831f91e165b62d719c05eb492f7375fa932b560",
+      "revision": "62340f3de702f6d2a7d97b9e16465b98360976a3",
       "version": "0.5.12",
       "role": "full_stack",
       "modules": [

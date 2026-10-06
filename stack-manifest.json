@@ -1,26 +1,13 @@
 {
   "schema_version": "agent-stack-train.stack-manifest.v1",
   "adopter": "paseo (Pukujan fork)",
-  "release_train": "2026-10-01",
-  "source": "https://github.com/Pukujan/agent-stack-train/blob/main/stack-releases.json",
+  "release_train": "current",
+  "source": "https://raw.githubusercontent.com/Pukujan/agent-stack-train/main/stack-releases.json",
   "pins": {
-    "observational-issue-ops": {
-      "version": "0.1.0"
-    },
-    "project-continuity-modules": {
-      "version": "0.6.0",
-      "commit": "4e2385474b4af9249ca009cbdcb38c4498932475",
-      "cli": "0.6.0"
-    },
-    "content-generation-modules": {
-      "version": "0.5.12",
-      "commit": "6831f91e165b62d719c05eb492f7375fa932b560",
-      "modules": 8
-    },
-    "agent-custom-setup": {
-      "module": "multi-agent-hotload",
-      "version": "0.1.0"
-    }
+    "agent-custom-setup": {},
+    "content-generation-modules": {},
+    "observational-issue-ops": {},
+    "project-continuity-modules": {}
   },
-  "notes": "observational-issue-ops is pinned because the train certifies it, but its files are not installed yet: the OIO installer refuses to write through AGENTS.md, which is a symlink to upstream CLAUDE.md. Tracked on https://github.com/Pukujan/paseo/issues/1."
+  "notes": "Empty pins follow the release train, so this manifest never freezes install-day versions (agent-stack-train SPEC: the installer writes empty pins). The exact verified revisions live in .coord/assignment.json. OIO 0.1.0 is installed via its own installer; AGENTS.md is a real file (closes https://github.com/Pukujan/paseo/issues/1)."
 }
