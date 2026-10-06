@@ -25,7 +25,7 @@ jobs:
     env:
       PCM_COMMIT: 4e2385474b4af9249ca009cbdcb38c4498932475
       CGM_COMMIT: 6831f91e165b62d719c05eb492f7375fa932b560
-      ACS_COMMIT: 3a381eba11c6262c702f5d696878c371342e859a
+      ACS_COMMIT: 38f8f52e8d210db3ce258bf911ebb560c6e0fe4c
       ACS_MODULE: modules/coordination/multi-agent-hotload/v0.1.0
     steps:
       - name: Check out the repository
@@ -83,3 +83,10 @@ jobs:
             --assignment "$GITHUB_WORKSPACE/.coord/assignment.json" \
             --cgm-root "$VALIDATION_ROOT/cgm" \
             --adopter-root "$GITHUB_WORKSPACE"
+
+      - name: Check dev root layout (ACS dev_root_check)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$PY" "$VALIDATION_ROOT/acs/$ACS_MODULE/scripts/dev_root_check.py" \
+            --dev-root "$(dirname "$GITHUB_WORKSPACE")"
